@@ -1,0 +1,1 @@
+from .flash_fwd_triton import flash_attn_triton_func

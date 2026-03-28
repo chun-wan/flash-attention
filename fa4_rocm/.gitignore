@@ -1,0 +1,7 @@
+*.hsaco
+*.amdgcn
+*.co
+__pycache__/
+*.pyc
+build/
+workloads/

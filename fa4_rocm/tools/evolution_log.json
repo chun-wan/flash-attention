@@ -1,0 +1,367 @@
+{
+  "baseline_aiter_tf": 350.7,
+  "rounds": [
+    {
+      "round": 1,
+      "name": "R01_BN32_stages2",
+      "tflops": 190.3,
+      "latency_us": 361.1,
+      "max_err": 0.003906,
+      "correct": true,
+      "is_best": true,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 2,
+      "name": "R02_BM64",
+      "tflops": 135.9,
+      "latency_us": 505.8,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 3,
+      "name": "R03_BN128",
+      "tflops": 95.4,
+      "latency_us": 720.3,
+      "max_err": 0.003906,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 128,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 4,
+      "name": "R04_warps8",
+      "tflops": 104.7,
+      "latency_us": 656.3,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 8,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 5,
+      "name": "R05_preload_v",
+      "tflops": 191.4,
+      "latency_us": 359.0,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": true,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 6,
+      "name": "R06_prescale_q",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 7,
+      "name": "R07_preload+prescale",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 8,
+      "name": "R08_BN32_preload",
+      "tflops": 190.5,
+      "latency_us": 360.7,
+      "max_err": 0.003906,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 9,
+      "name": "R09_BN32_prescale",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 10,
+      "name": "R10_BN32_both",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 11,
+      "name": "R11_waves1",
+      "tflops": 136.4,
+      "latency_us": 503.7,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 1,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 12,
+      "name": "R12_waves3",
+      "tflops": 70.4,
+      "latency_us": 975.5,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 3,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 13,
+      "name": "R13_BM64_preload",
+      "tflops": 140.0,
+      "latency_us": 490.9,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 14,
+      "name": "R14_BM64_prescale",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 15,
+      "name": "R15_BM64_both",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 16,
+      "name": "R16_BN32_stages2_w8",
+      "tflops": 105.7,
+      "latency_us": 650.0,
+      "max_err": 0.003906,
+      "correct": true,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 32,
+        "num_warps": 8,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": false,
+        "PRE_SCALE_Q": false
+      }
+    },
+    {
+      "round": 17,
+      "name": "R17_BM64_BN32_stg2",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 18,
+      "name": "R18_BN64_stg2",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 19,
+      "name": "R19_BN64_w8_preload",
+      "tflops": 0.0,
+      "latency_us": 99999.0,
+      "max_err": 0.015625,
+      "correct": false,
+      "is_best": false,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 8,
+        "num_stages": 1,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": true
+      }
+    },
+    {
+      "round": 20,
+      "name": "R20_best_combo",
+      "tflops": 199.9,
+      "latency_us": 343.8,
+      "max_err": 0.001953,
+      "correct": true,
+      "is_best": true,
+      "config": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 2,
+        "PRE_LOAD_V": true,
+        "PRE_SCALE_Q": false
+      }
+    }
+  ],
+  "best_name": "R20_best_combo",
+  "best_tf": 199.9
+}

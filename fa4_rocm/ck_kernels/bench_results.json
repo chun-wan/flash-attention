@@ -1,0 +1,90 @@
+[
+  {
+    "name": "prefill_b2s2k_causal",
+    "batch": 2,
+    "seqlen": 2048,
+    "nheads_q": 32,
+    "nheads_k": 32,
+    "hdim": 128,
+    "causal": true,
+    "ck_tflops": 307.6,
+    "ck_latency_us": 223.4,
+    "sdpa_tflops": 166.7,
+    "sdpa_latency_us": 412.3,
+    "speedup": 1.85
+  },
+  {
+    "name": "prefill_b2s4k_causal",
+    "batch": 2,
+    "seqlen": 4096,
+    "nheads_q": 32,
+    "nheads_k": 32,
+    "hdim": 128,
+    "causal": true,
+    "ck_tflops": 426.6,
+    "ck_latency_us": 644.4,
+    "sdpa_tflops": 246.5,
+    "sdpa_latency_us": 1114.9,
+    "speedup": 1.73
+  },
+  {
+    "name": "prefill_b1s8k_causal",
+    "batch": 1,
+    "seqlen": 8192,
+    "nheads_q": 32,
+    "nheads_k": 32,
+    "hdim": 128,
+    "causal": true,
+    "ck_tflops": 482.6,
+    "ck_latency_us": 1139.2,
+    "sdpa_tflops": 277.7,
+    "sdpa_latency_us": 1979.9,
+    "speedup": 1.74
+  },
+  {
+    "name": "prefill_b2s2k_noncausal",
+    "batch": 2,
+    "seqlen": 2048,
+    "nheads_q": 32,
+    "nheads_k": 32,
+    "hdim": 128,
+    "causal": false,
+    "ck_tflops": 455.6,
+    "ck_latency_us": 301.7,
+    "sdpa_tflops": 283.5,
+    "sdpa_latency_us": 484.7,
+    "speedup": 1.61
+  },
+  {
+    "name": "gqa4_b2s2k_causal",
+    "batch": 2,
+    "seqlen": 2048,
+    "nheads_q": 32,
+    "nheads_k": 8,
+    "hdim": 128,
+    "causal": true,
+    "ck_tflops": 373.2,
+    "ck_latency_us": 184.2,
+    "sdpa_tflops": 187.9,
+    "sdpa_latency_us": 365.8,
+    "speedup": 1.99
+  },
+  {
+    "name": "prefill_b4s2k_causal",
+    "batch": 4,
+    "seqlen": 2048,
+    "nheads_q": 32,
+    "nheads_k": 32,
+    "hdim": 128,
+    "causal": true,
+    "ck_tflops": 389.0,
+    "ck_latency_us": 353.4,
+    "sdpa_tflops": 210.5,
+    "sdpa_latency_us": 653.1,
+    "speedup": 1.85
+  },
+  {
+    "name": "triton_b2s2k_causal",
+    "triton_tflops": 117.3
+  }
+]
