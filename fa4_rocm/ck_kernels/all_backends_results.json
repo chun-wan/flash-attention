@@ -1,0 +1,74 @@
+{
+  "backends": [
+    "CK(aiter)",
+    "Triton AVO",
+    "Triton v1",
+    "aiter FA3v3",
+    "aiter FA2CK",
+    "SDPA"
+  ],
+  "shapes": [
+    {
+      "shape": "b2_s2048_causal",
+      "CK(aiter)": 325.4,
+      "Triton AVO": 179.9,
+      "Triton v1": 123.7,
+      "aiter FA3v3": 388.4,
+      "aiter FA2CK": 241.2,
+      "SDPA": 174.1
+    },
+    {
+      "shape": "b2_s4096_causal",
+      "CK(aiter)": 442.0,
+      "Triton AVO": 258.7,
+      "Triton v1": 162.9,
+      "aiter FA3v3": 451.9,
+      "aiter FA2CK": 339.4,
+      "SDPA": 243.2
+    },
+    {
+      "shape": "b1_s8192_causal",
+      "CK(aiter)": 480.3,
+      "Triton AVO": 304.9,
+      "Triton v1": 203.2,
+      "aiter FA3v3": 477.6,
+      "aiter FA2CK": 378.1,
+      "SDPA": 271.2
+    },
+    {
+      "shape": "b2_s2048_noncausal",
+      "CK(aiter)": 440.2,
+      "Triton AVO": 313.5,
+      "Triton v1": 216.6,
+      "aiter FA3v3": 446.8,
+      "aiter FA2CK": 337.5,
+      "SDPA": 283.0
+    },
+    {
+      "shape": "b2_GQA4_causal",
+      "CK(aiter)": 382.7,
+      "Triton AVO": 186.7,
+      "Triton v1": 123.7,
+      "aiter FA3v3": 384.9,
+      "aiter FA2CK": 309.8,
+      "SDPA": 150.3
+    },
+    {
+      "shape": "b4_s2048_causal",
+      "CK(aiter)": 390.1,
+      "Triton AVO": 215.4,
+      "Triton v1": 143.0,
+      "aiter FA3v3": 400.7,
+      "aiter FA2CK": 283.3,
+      "SDPA": 199.9
+    }
+  ],
+  "averages": {
+    "CK(aiter)": 410.1166666666666,
+    "Triton AVO": 243.1833333333333,
+    "Triton v1": 162.18333333333334,
+    "aiter FA3v3": 425.05,
+    "aiter FA2CK": 314.8833333333333,
+    "SDPA": 220.28333333333333
+  }
+}
