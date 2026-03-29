@@ -1,0 +1,18 @@
+[
+  {
+    "shape": "b1s128h1",
+    "correct": true,
+    "error": 4.76837158203125e-07,
+    "tflops": 0.0254,
+    "latency_us": 330.0,
+    "compile_s": 1.2
+  },
+  {
+    "shape": "b2s2048h32",
+    "correct": true,
+    "error": 0.00048828125,
+    "tflops": 0.6694,
+    "latency_us": 205329.0,
+    "compile_s": 0.9
+  }
+]
