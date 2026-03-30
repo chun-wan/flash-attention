@@ -16,6 +16,7 @@ sys.path.insert(0, "/opt/FlyDSL/kernels")
 os.chdir("/opt/FlyDSL")
 
 import flydsl
+from flydsl.utils import SmemAllocator, SmemPtr
 from flydsl.dialects.ext import flir, arith, gpu, buffer_ops, vector, rocdl
 from flydsl.dialects.ext import math as flydsl_math
 from flydsl.dialects.ext.python_control_flow import range_constexpr
@@ -42,6 +43,7 @@ def build_mfma_flash_attn(seqlen, num_heads, batch, softmax_scale):
     grid_m = (seqlen + BLOCK_M - 1) // BLOCK_M
 
     module_name = f"flash_mfma_tile_b{batch}s{seqlen}h{num_heads}"
+    p_allocator = SmemAllocator(None, arch=arch)
 
     class _FA(flir.MlirModule):
         GPU_MODULE_NAME = module_name
@@ -50,7 +52,9 @@ def build_mfma_flash_attn(seqlen, num_heads, batch, softmax_scale):
         ]
 
         def init_gpu_module(self):
-            pass
+            # LDS for P tile: 16x16 bf16 = 512 bytes (store P as bf16 for MFMA reload)
+            p_allocator.allocate_array(T.bf16, BLOCK_M * BLOCK_N)
+            p_allocator.finalize()
 
         @flir.kernel
         def flash_kernel(
@@ -191,60 +195,68 @@ def build_mfma_flash_attn(seqlen, num_heads, batch, softmax_scale):
                 for acc_idx in range_constexpr(K_STEPS):
                     new_accs.append(i_accs[acc_idx] * rescale_v)
 
-                # ======= P @ V via scalar accumulation =======
-                # Each thread has p_v[0..3] = P at positions S[(t/16)*4+j, t%16]
-                # For output O, each thread writes to O[(t/16)*4+j, hd_col]
-                # O[row, d] += P[row, k_col] * V[k_col, d]
-                # Here k_col = t%16 (the column in the 16x16 QK tile = the KV row index)
-                # V[k_col, d] = V[n_start + k_col, d]
-                # k_col = m_idx (= t%16)
-                v_row_base = k_row_base + m_idx * stride_s
+                # ======= P @ V via LDS transpose + MFMA =======
+                # Store P to LDS row-major: LDS[row*16+col] = P[row,col]
+                # Lane t has P[(t/16)*4+j, t%16] for j=0..3
+                lds_base = p_allocator.get_base()
+                p_lds = SmemPtr(lds_base, 0, T.bf16, shape=(BLOCK_M * BLOCK_N,)).get()
+
+                for j in range_constexpr(4):
+                    p_row = n_group * c4 + arith.constant(j, type=T.i32)
+                    p_col = m_idx
+                    lds_idx = arith.index_cast(T.index, p_row * c16 + p_col)
+                    p_bf16 = arith.trunc_f(T.bf16, vector.extract(p_v, static_position=[j]))
+                    vector.store(vector.broadcast(T.vec(1, T.bf16), p_bf16), p_lds, [lds_idx])
+
+                gpu.barrier()
+
+                # Reload P for MFMA srcA: P[m_idx, n_group*4:+4]
+                # 4 bf16 from LDS[m_idx*16 + n_group*4 : +4]
+                p_lds_off = arith.index_cast(T.index, m_idx * c16 + n_group * c4)
+                # Load 4 bf16 as 2 i32 (since bf16 = 2 bytes, 4 bf16 = 8 bytes = 2 dwords)
+                # Use vector.load of vec(4, bf16) then bitcast to vec(4, i16)
+                p_loaded = vector.load_op(T.vec(4, T.bf16), p_lds, [p_lds_off])
+                p_srcA = vector.bitcast(T.vec(4, T.i16), p_loaded)
+
+                # P@V MFMA: C = P @ V^T_input (MFMA auto-transposes B)
+                # To get P@V, pass V^T as srcB -> MFMA computes P @ (V^T)^T = P @ V
+                # V is at [n_start+k, hd_dim], we need V^T[hd_dim, n_start+k]
+                # V^T[d, k] = V[k, d]
+                # For srcB at lane t: B^T[t%16, (t/16)*4:+4]
+                # = V^T[t%16, (t/16)*4:+4] = V[(t/16)*4:+4, t%16]
+                # So load V[(t/16)*4+j, t%16] = V[n_start + n_group*4+j, m_idx_hd]
+                # where m_idx_hd is the HD dimension index
 
                 for vs in range_constexpr(K_STEPS):
-                    # For each PV output tile vs, load V[m_idx, vs*16+n_group*4:+4]
-                    v_elem = v_row_base + arith.constant(vs * MFMA_K, type=T.i32) + n_group * c4
-                    v_dw = arith.unwrap(v_elem / c2)
-                    v0_i32 = buffer_ops.buffer_load(v_rsrc, v_dw, vec_width=1, dtype=T.i32)
-                    v1_i32 = buffer_ops.buffer_load(v_rsrc, arith.unwrap(v_dw + c1_i32), vec_width=1, dtype=T.i32)
-                    v_bf16x4 = vector.bitcast(T.vec(4, T.bf16), vector.from_elements(T.vec(2, T.i32), [v0_i32, v1_i32]))
-
-                    # Each of the 4 P elements multiplies the same 4 V elements?
-                    # No: P[row_j, col=m_idx] * V[m_idx, d_chunk]
-                    # All 4 P values share the same V[m_idx, d_chunk]
-                    # O[(t/16)*4+j, vs*16+n_group*4+e] += P_j * V_e
-                    # This is an outer product: 4 P values * 4 V values = 4x4 contributions
-                    # But each thread's output is at a SINGLE column position in the output.
-                    # Wait: the output layout for PV is different from QK.
-                    #
-                    # The issue: after QK, each thread has 4 score values at positions
-                    # S[(t/16)*4+j, t%16]. For PV, we want to compute
-                    # O[q_row, hd_d] = sum_k P[q_row, k] * V[k, hd_d]
-                    # Thread t has P values at rows (t/16)*4+j, column t%16.
-                    # So this thread can contribute P_j * V[t%16, hd_d] to O[(t/16)*4+j, hd_d]
-                    # for all hd_d in 0..HD. But we can only store a limited number of values.
-                    #
-                    # For the scalar approach: this thread handles q_row = (t/16)*4+j for j=0..3
-                    # and k_col = t%16. It contributes P_j * V[k_col, d] for all d.
-                    # But we need to SUM across all k_col (0-15) for each q_row.
-                    # This thread only has ONE k_col. We need cross-thread reduction.
-                    #
-                    # This is the fundamental issue with MFMA flash attention:
-                    # after QK, the score S is distributed so each thread has ONE column
-                    # (t%16) of 4 rows. For PV, we need to reduce across columns.
-                    # Either store P to LDS and reload, or use shuffle.
-                    #
-                    # For now: accumulate this thread's partial contribution
-                    # Each thread contributes P[j] * V[m_idx, d] for its m_idx (one column)
+                    hd_off = arith.constant(vs * MFMA_K, type=T.i32)
+                    # V srcB: each thread loads V[n_start+n_group*4:+4, hd_off+m_idx]
+                    # These are 4 elements from 4 different KV rows at one HD column
+                    # V[row, col] = flat[(batch_offset) + row * stride_s + col]
+                    v_elems_i16 = []
                     for j in range_constexpr(4):
-                        p_j = vector.extract(p_v, static_position=[j])
-                        for e in range_constexpr(4):
-                            v_e = arith.extf(T.f32, vector.extract(v_bf16x4, static_position=[e]))
-                            pv = p_j * v_e
-                            # This is a partial: needs reduction across 16 threads (columns)
-                            # For now, just accumulate (will be 1/16th of correct answer)
-                            old = vector.extract(new_accs[vs], static_position=[e])
-                            new_val = old + pv
-                            new_accs[vs] = vector.insert(new_val, new_accs[vs], static_position=[e])
+                        v_kv_row = n_start + n_group * c4 + arith.constant(j, type=T.i32)
+                        v_hd_col = hd_off + m_idx
+                        v_elem_off = k_head_base + v_kv_row * stride_s + v_hd_col
+                        # Use byte-offset load: soffset_bytes = v_elem_off * 2
+                        v_byte_off = arith.unwrap(v_elem_off * c2)
+                        v_i32 = buffer_ops.buffer_load(
+                            v_rsrc, arith.constant(0, type=T.i32),
+                            vec_width=1, dtype=T.i32,
+                            soffset_bytes=v_byte_off
+                        )
+                        # Low 16 bits is our bf16 (byte-aligned load)
+                        v_i16 = arith.TruncIOp(T.i16, arith.unwrap(v_i32)).result
+                        v_elems_i16.append(v_i16)
+
+                    v_srcB = vector.from_elements(T.vec(4, T.i16), v_elems_i16)
+
+                    new_accs[vs] = rocdl.mfma_f32_16x16x16bf16_1k(
+                        T.f32x4, [p_srcA, v_srcB, new_accs[vs], 0, 0, 0]
+                    )
+
+                gpu.barrier()
+
+                # (old scalar P@V code removed - replaced by MFMA P@V via LDS above)
 
                 yield_args = [arith.unwrap(new_max), arith.unwrap(new_sum)] + \
                              [arith.unwrap(a) for a in new_accs]
