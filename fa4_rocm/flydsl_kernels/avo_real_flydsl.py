@@ -6,7 +6,7 @@ from pathlib import Path
 LLVM_BIN = "/opt/rocm/lib/llvm/bin"
 ARCH = "gfx942"
 WORKSPACE = "/tmp/avo_real_flydsl"
-ISA_SRC = "/tmp/mfma_lib_dump/flash_kernel/15_final_isa.s"
+ISA_SRC = "/tmp/mfma_final/flash_kernel/15_final_isa.s"
 
 
 def run_cmd(cmd, **kw):

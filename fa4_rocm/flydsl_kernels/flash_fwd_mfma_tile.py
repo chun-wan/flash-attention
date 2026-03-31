@@ -52,8 +52,11 @@ def build_mfma_flash_attn(seqlen, num_heads, batch, softmax_scale):
         ]
 
         def init_gpu_module(self):
-            # LDS for P tile: 16x16 bf16 = 512 bytes (store P as bf16 for MFMA reload)
-            p_allocator.allocate_array(T.bf16, BLOCK_M * BLOCK_N)
+            # LDS layout:
+            # [0 .. 255]: P tile 16x16 bf16 = 512 bytes = 256 bf16 elements
+            # [256 .. 319]: softmax reduction max: 16 rows * 4 n_groups = 64 f32
+            # [320 .. 383]: softmax reduction sum: 16 rows * 4 n_groups = 64 f32
+            p_allocator.allocate_array(T.bf16, BLOCK_M * BLOCK_N + 256)  # extra for f32 reduction slots
             p_allocator.finalize()
 
         @flir.kernel
@@ -165,30 +168,81 @@ def build_mfma_flash_attn(seqlen, num_heads, batch, softmax_scale):
                         T.f32x4, [a_v4i16, b_v4i16, acc_qk, 0, 0, 0]
                     )
 
-                # Scale QK scores
-                scale_v = arith.constant_vector(_scale, T.f32x4)
-                acc_qk = acc_qk * scale_v
+                # (scaling done during LDS store below)
 
-                # ======= Online Softmax (per-element) =======
+                # ======= Online Softmax via LDS: store scores, reload full row =======
+                # Store all 16x16 scores to LDS as f32, then each thread reads its row
                 log2e_c = arith.constant(1.4426950408889634, type=T.f32)
+
+                lds_base = p_allocator.get_base()
+                # Use f32 view for scores: 16x16 = 256 f32 starting at byte 0
+                # (P tile bf16 will reuse same LDS space later)
+                score_lds = SmemPtr(lds_base, 0, T.f32, shape=(256,)).get()
+
+                # Store: lane t has S[(t/16)*4+j, t%16] -> LDS[row*16+col] as f32
+                for j in range_constexpr(4):
+                    s_row = n_group * c4 + arith.constant(j, type=T.i32)
+                    s_col = m_idx
+                    s_idx = arith.index_cast(T.index, s_row * c16 + s_col)
+                    s_val = vector.extract(acc_qk, static_position=[j])
+                    # Scale here
+                    s_scaled = s_val * scale_f
+                    vector.store(vector.broadcast(T.vec(1, T.f32), s_scaled), score_lds, [s_idx])
+
+                gpu.barrier()
+
+                # Each thread computes softmax for its 4 rows
+                # Row r = n_group*4+j, read 16 elements: score_lds[r*16+0..15]
                 new_max_elems = []
-                rescale_elems = []
-                p_elems = []
-                for e in range_constexpr(4):
-                    old_m = vector.extract(i_max, static_position=[e])
-                    cur_s = vector.extract(acc_qk, static_position=[e])
-                    nm = arith.maximum(old_m, cur_s)
-                    new_max_elems.append(nm)
-                    re = flydsl_math.exp2(arith.unwrap((old_m - nm) * log2e_c))
-                    rescale_elems.append(re)
-                    pe = flydsl_math.exp2(arith.unwrap((cur_s - nm) * log2e_c))
-                    p_elems.append(pe)
+                p_elems_per_row = []
+                sum_elems = []
+
+                for j in range_constexpr(4):
+                    s_row = n_group * c4 + arith.constant(j, type=T.i32)
+                    # Find row max across 16 columns
+                    row_max = arith.constant(float("-inf"), type=T.f32)
+                    for c_col in range_constexpr(16):
+                        idx = arith.index_cast(T.index, s_row * c16 + arith.constant(c_col, type=T.i32))
+                        sv = vector.extract(vector.load_op(T.vec(1, T.f32), score_lds, [idx]), static_position=[0])
+                        row_max = arith.maximum(row_max, sv)
+
+                    # Online softmax: merge with running max
+                    old_m_j = vector.extract(i_max, static_position=[j])
+                    new_m_j = arith.maximum(old_m_j, row_max)
+                    new_max_elems.append(new_m_j)
+
+                    # Compute exp2 and sum for this row
+                    row_sum = arith.constant(0.0, type=T.f32)
+                    for c_col in range_constexpr(16):
+                        idx = arith.index_cast(T.index, s_row * c16 + arith.constant(c_col, type=T.i32))
+                        sv = vector.extract(vector.load_op(T.vec(1, T.f32), score_lds, [idx]), static_position=[0])
+                        pv = flydsl_math.exp2(arith.unwrap((sv - new_m_j) * log2e_c))
+                        row_sum = row_sum + pv
+
+                    # Rescale factor for old accumulators
+                    rescale_j = flydsl_math.exp2(arith.unwrap((old_m_j - new_m_j) * log2e_c))
+                    old_sum_j = vector.extract(i_sum, static_position=[j])
+                    new_sum_j = old_sum_j * rescale_j + row_sum
+                    sum_elems.append(new_sum_j)
+
+                    # Store the probability for this thread's column (m_idx) in this row
+                    my_score_idx = arith.index_cast(T.index, s_row * c16 + m_idx)
+                    my_sv = vector.extract(vector.load_op(T.vec(1, T.f32), score_lds, [my_score_idx]), static_position=[0])
+                    my_p = flydsl_math.exp2(arith.unwrap((my_sv - new_m_j) * log2e_c))
+                    p_elems_per_row.append(my_p)
 
                 new_max = vector.from_elements(T.f32x4, new_max_elems)
-                rescale_v = vector.from_elements(T.f32x4, rescale_elems)
-                p_v = vector.from_elements(T.f32x4, p_elems)
+                p_v = vector.from_elements(T.f32x4, p_elems_per_row)
+                new_sum = vector.from_elements(T.f32x4, sum_elems)
 
-                new_sum = i_sum * rescale_v + p_v
+                # Rescale old PV accumulators
+                rescale_elems = []
+                for j in range_constexpr(4):
+                    old_m_j = vector.extract(i_max, static_position=[j])
+                    new_m_j = vector.extract(new_max, static_position=[j])
+                    re = flydsl_math.exp2(arith.unwrap((old_m_j - new_m_j) * log2e_c))
+                    rescale_elems.append(re)
+                rescale_v = vector.from_elements(T.f32x4, rescale_elems)
 
                 # Rescale existing PV accumulators
                 new_accs = []
