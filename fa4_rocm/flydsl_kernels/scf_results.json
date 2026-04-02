@@ -1,0 +1,20 @@
+[
+  {
+    "shape": "b1_s128_h1",
+    "compiled": true,
+    "correct": true,
+    "max_error": 4.76837158203125e-07,
+    "tflops": 0.0283,
+    "latency_us": 296.3,
+    "compile_time_s": 1.1
+  },
+  {
+    "shape": "b2_s2048_h32",
+    "compiled": true,
+    "correct": true,
+    "max_error": 0.00048828125,
+    "tflops": 0.6695,
+    "latency_us": 205274.1,
+    "compile_time_s": 0.7
+  }
+]

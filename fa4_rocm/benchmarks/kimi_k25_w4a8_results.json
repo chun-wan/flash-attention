@@ -1,0 +1,49 @@
+{
+  "description": "Kimi K2.5 W4A8 benchmark on 8x MI325X (gfx942), con=40, 160 prompts, input=10240, output=512",
+  "attention_kernel": "CK v3 ASM (fmha_v3_fwd/MI300/fwd_hd192x128_bf16_causal_rtna_group.co)",
+  "results": {
+    "baseline_image": {
+      "image": "rocm/ali-private:debian12_rocm7.2.0.43_cp312_numa_fix_20260305",
+      "torch_compile": true,
+      "mean_tpot_ms": 59.68,
+      "median_tpot_ms": 59.23,
+      "p99_tpot_ms": 139.19,
+      "output_throughput_toks": 511.65,
+      "mean_ttft_ms": 3774.80,
+      "duration_s": 75.88
+    },
+    "ttest_kimi_image": {
+      "image": "clementlincf/bd-private:debian12_rocm7.2.0.43_cp312_kimi_a8w8_20260325",
+      "torch_compile": false,
+      "mean_tpot_ms": 58.43,
+      "median_tpot_ms": 58.35,
+      "p99_tpot_ms": 137.34,
+      "output_throughput_toks": 531.19,
+      "mean_ttft_ms": 3383.31,
+      "duration_s": 73.09
+    },
+    "triton_attention": {
+      "image": "clementlincf/bd-private:debian12_rocm7.2.0.43_cp312_kimi_a8w8_20260325",
+      "attention_backend": "triton",
+      "mean_tpot_ms": 73.60,
+      "median_tpot_ms": 68.30,
+      "p99_tpot_ms": 227.62,
+      "output_throughput_toks": 422.64,
+      "mean_ttft_ms": 4522.75,
+      "duration_s": 91.86
+    }
+  },
+  "kernel_level_comparison": {
+    "ck_v3_asm_avg_tf": 410.1,
+    "triton_avg_tf": 162.2,
+    "sdpa_avg_tf": 220.3,
+    "ck_avo_best_tf": 343.8,
+    "note": "CK v3 ASM is already the default in aiter attention backend"
+  },
+  "analysis": {
+    "ck_vs_triton_tpot_improvement": "-20.6%",
+    "ck_vs_triton_throughput_improvement": "+25.6%",
+    "attention_fraction_of_tpot": "~15-20% for MoE model",
+    "fa4_prefill_benefit": "TTFT improved 10.4% (longer sequences benefit more)"
+  }
+}
