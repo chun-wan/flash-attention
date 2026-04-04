@@ -21,7 +21,7 @@
 
 #include <hip/hip_runtime.h>
 #include <hip/hip_bfloat16.h>
-#include <hip/amd_detail/amd_hip_fp8.h>
+// FP8 via manual bit manipulation (device-compatible)
 #include <cstdint>
 #include <cmath>
 #include <cfloat>
@@ -50,24 +50,25 @@ constexpr float LOG2E = 1.4426950408889634f;
 constexpr float FP8_MAX = 240.0f;
 
 // ── FP8 conversion helpers ────────────────────────────────────
+// Software FP8 E4M3 conversion (device-compatible)
+// E4M3 FNUZ: 4 exponent bits, 3 mantissa bits, no NaN/Inf, zero-centered
 __device__ __forceinline__ uint8_t bf16_to_fp8_e4m3(hip_bfloat16 x) {
     float val = static_cast<float>(x);
     val = fminf(fmaxf(val, -FP8_MAX), FP8_MAX);
-    __hip_fp8_e4m3_fnuz fp8_val(val);
-    return *reinterpret_cast<uint8_t*>(&fp8_val);
-}
+    // Use the GFX942 hardware conversion via v_cvt_pk_fp8_f32
+    // For now: simple truncation from f32 to fp8 bit pattern
+    uint32_t fbits = __float_as_uint(val);
+    uint8_t sign = (fbits >> 31) & 1;
+    int exp = ((fbits >> 23) & 0xFF) - 127; // unbias f32 exponent
+    uint32_t mantissa = (fbits >> 20) & 0x7; // top 3 mantissa bits
 
-__device__ __forceinline__ uint64_t pack_8xfp8_to_i64(
-    hip_bfloat16 v0, hip_bfloat16 v1, hip_bfloat16 v2, hip_bfloat16 v3,
-    hip_bfloat16 v4, hip_bfloat16 v5, hip_bfloat16 v6, hip_bfloat16 v7
-) {
-    uint8_t bytes[8] = {
-        bf16_to_fp8_e4m3(v0), bf16_to_fp8_e4m3(v1),
-        bf16_to_fp8_e4m3(v2), bf16_to_fp8_e4m3(v3),
-        bf16_to_fp8_e4m3(v4), bf16_to_fp8_e4m3(v5),
-        bf16_to_fp8_e4m3(v6), bf16_to_fp8_e4m3(v7),
-    };
-    return *reinterpret_cast<uint64_t*>(bytes);
+    if (val == 0.0f) return 0;
+    exp = exp + 8; // rebias for E4M3 (bias=8 for FNUZ)
+    if (exp <= 0) return (sign << 7); // underflow to zero
+    if (exp >= 15) { // overflow to max
+        return (sign << 7) | 0x7E; // max normal
+    }
+    return (sign << 7) | ((exp & 0xF) << 3) | (mantissa & 0x7);
 }
 
 // ── MFMA FP8 intrinsic ───────────────────────────────────────
@@ -353,4 +354,61 @@ void flash_fwd_fa4_fp8(
                 m + logf(s);
         }
     }
+}
+
+// ── PyTorch Extension Binding ─────────────────────────────────
+#include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>
+
+torch::Tensor fa4_fwd_launch(
+    torch::Tensor q,    // (B, S_q, H_q, D) bf16
+    torch::Tensor k,    // (B, S_k, H_k, D) bf16
+    torch::Tensor v,    // (B, S_k, H_k, D) bf16
+    float softmax_scale,
+    bool is_causal
+) {
+    TORCH_CHECK(q.is_cuda(), "q must be CUDA");
+    TORCH_CHECK(q.dim() == 4, "q must be 4D");
+    
+    const int batch = q.size(0);
+    const int seqlen_q = q.size(1);
+    const int num_heads_q = q.size(2);
+    const int head_dim = q.size(3);
+    const int seqlen_k = k.size(1);
+    const int num_heads_k = k.size(2);
+    
+    auto o = torch::zeros_like(q);
+    
+    const int grid_m = (seqlen_q + BLOCK_M - 1) / BLOCK_M;
+    dim3 grid(grid_m, num_heads_q, batch);
+    dim3 block(NUM_THREADS, 1, 1);
+    
+    auto stream = at::cuda::getCurrentCUDAStream().stream();
+    
+    float scale_log2 = softmax_scale * LOG2E;
+    
+    int stride_qb = num_heads_q * seqlen_q * head_dim;
+    int stride_qh = seqlen_q * head_dim;
+    int stride_kb = num_heads_k * seqlen_k * head_dim;
+    int stride_kh = seqlen_k * head_dim;
+    int stride_ob = num_heads_q * seqlen_q * head_dim;
+    int stride_oh = seqlen_q * head_dim;
+    
+    hipLaunchKernelGGL(flash_fwd_fa4_fp8,
+        grid, block, 0, stream,
+        reinterpret_cast<const hip_bfloat16*>(q.data_ptr()),
+        reinterpret_cast<const hip_bfloat16*>(k.data_ptr()),
+        reinterpret_cast<const hip_bfloat16*>(v.data_ptr()),
+        reinterpret_cast<hip_bfloat16*>(o.data_ptr()),
+        nullptr,  // LSE
+        seqlen_q, seqlen_k, num_heads_q, num_heads_k,
+        scale_log2, is_causal ? 1 : 0,
+        stride_qb, stride_qh, stride_kb, stride_kh, stride_ob, stride_oh
+    );
+    
+    return o;
+}
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("fa4_fwd", &fa4_fwd_launch, "FA4 forward (FP8 MFMA)");
 }
